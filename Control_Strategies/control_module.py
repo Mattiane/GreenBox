@@ -1,5 +1,5 @@
 import json
-from control_strategies import BasicControlStrategy, AdvancedControlStrategy
+from control_strategies import BasicControlStrategy, AdvancedControlStrategy, BasicHumidityControlStrategy, AdvancedHumidityControlStrategy
 
 
 class ControlModule:
@@ -27,6 +27,16 @@ class ControlModule:
                     return AdvancedControlStrategy(thresholds, self.mqtt_client, self.base_topic)
                 else:
                     raise ValueError(f"Strategia sconosciuta: {strategy_name}")
+            if client["raspberry_id"] == raspberry_id:
+                strategy_name = client["control_strategy"]
+                thresholds = self.catalog.get("thresholds", {}).get("air_humidity", {"min": 40, "max": 70})
+
+            if strategy_name == "BasicHumidityControlStrategy":
+                print("[DEBUG] Loading BasicHumidityControlStrategy")
+                return BasicHumidityControlStrategy(thresholds, self.mqtt_client, self.base_topic)
+            elif strategy_name == "AdvancedHumidityControlStrategy":
+                print("[DEBUG] Loading AdvancedHumidityControlStrategy")
+                return AdvancedHumidityControlStrategy(thresholds, self.mqtt_client, self.base_topic)
 
         raise ValueError("Raspberry Pi non trovato nel catalogo.")
 

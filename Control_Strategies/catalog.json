@@ -3,12 +3,20 @@
     {
       "client_name": "Cliente1",
       "raspberry_id": "rb01",
-      "control_strategy": "BasicControlStrategy"
+      "control_strategy": "BasicControlStrategy",
+      "control_strategy2": "BasicHumidityControlStrategy",
+      "control_strategy3": "BasicSoilHumidityControlStrategy",
+      "control_strategy4": "BasicPARControlStrategy",
+      "control_strategy5": "BasicpHControlStrategy"
     },
     {
       "client_name": "Cliente2",
       "raspberry_id": "rb02",
-      "control_strategy": "AdvancedControlStrategy"
+      "control_strategy": "AdvancedControlStrategy",
+      "control_strategy2": "AdvancedHumidityControlStrategy",
+      "control_strategy3": "AdvancedSoilHumidityControlStrategy",
+      "control_strategy4": "AdvancedPARControlStrategy",
+      "control_strategy5": "AdvancedpHControlStrategy"
     }
   ]
 }

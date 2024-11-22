@@ -134,3 +134,43 @@ class AdvancedControlStrategy(ControlStrategy):
         topic = f"{self.base_topic}/actuators/{command}"
         print(f"[DEBUG] Inviando comando: {command}, attivazione: {activate} sul topic: {topic}")
         self.mqtt_client.myPublish(topic, message)
+
+class BasicHumidityControlStrategy(ControlStrategy):
+    def analyze_statistics(self, stats):
+        mean_humidity = stats.get("mean_humidity")
+
+        if mean_humidity is None:
+            print("[ERROR] Missing mean_humidity in stats")
+            return
+
+        if mean_humidity > self.thresholds["max"]:
+            print("[INFO] Activating dehumidifier")
+            self.send_command("dehumidifier", True)
+        elif mean_humidity < self.thresholds["min"]:
+            print("[INFO] Activating humidifier")
+            self.send_command("humidifier", True)
+        else:
+            print("[INFO] Deactivating all actuators")
+            self.send_command("dehumidifier", False)
+            self.send_command("humidifier", False)
+
+class AdvancedHumidityControlStrategy(ControlStrategy):
+    def analyze_statistics(self, stats):
+        mean_humidity = stats.get("mean_humidity")
+        stddev_humidity = stats.get("stddev")
+
+        if mean_humidity is None or stddev_humidity is None:
+            print("[ERROR] Missing statistics for advanced control")
+            return
+
+        # Controllo basato su deviazione standard
+        if mean_humidity > self.thresholds["max"] and stddev_humidity > 5:
+            print("[INFO] Activating dehumidifier aggressively")
+            self.send_command("dehumidifier", True)
+        elif mean_humidity < self.thresholds["min"] and stddev_humidity > 5:
+            print("[INFO] Activating humidifier aggressively")
+            self.send_command("humidifier", True)
+        else:
+            print("[INFO] Deactivating all actuators")
+            self.send_command("dehumidifier", False)
+            self.send_command("humidifier", False)
