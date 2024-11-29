@@ -1,176 +1,147 @@
-import time
+import logging
 
+logger = logging.getLogger("GreenBox")
 
 class ControlStrategy:
-    def __init__(self, thresholds, mqtt_client, base_topic):
+    def __init__(self, thresholds, actuators, mqtt_client, base_topic):
+        """
+        Classe base per implementare strategie di controllo.
+        """
         self.thresholds = thresholds
+        self.actuators = actuators
         self.mqtt_client = mqtt_client
         self.base_topic = base_topic
 
     def analyze_statistics(self, statistics):
-        raise NotImplementedError("Implement this method in the subclass.")
+        """
+        Analizza le statistiche e applica la strategia di controllo.
+        """
+        metric_value = statistics.get("mean_temperature")
+        std_dev = statistics.get("std_dev", 0)
+        print(f"[DEBUG] Metric value: {metric_value}, Std Dev: {std_dev}")
 
-
-class BasicControlStrategy(ControlStrategy):
-    def __init__(self, thresholds, mqtt_client, base_topic):
-        super().__init__(thresholds, mqtt_client, base_topic)
-        self.in_range_counter = 0  # Counter for consecutive in-range readings
-        self.cooling_active = False
-        self.heating_active = False
-
-    def analyze_statistics(self, statistics):
-        mean_temp = statistics.get("mean_temperature")
-
-        if mean_temp is None:
-            print("[ERROR] Campo 'mean_temperature' mancante.")
-            return
-
-        # Attiva cooling se la temperatura è sopra la soglia massima
-        if mean_temp > self.thresholds["max"]:
-            if not self.cooling_active:
-                print("[DEBUG] Superata soglia massima, attivazione raffreddamento.")
-                print(f"[ALERT] Valori delle statistiche fuori norma: {statistics}")
-                self.send_command("cooling", True)
-                self.cooling_active = True
-                self.heating_active = False
-            self.in_range_counter = 0  # Resetta il contatore se fuori dai limiti
-
-        # Attiva heating se la temperatura è sotto la soglia minima
-        elif mean_temp < self.thresholds["min"]:
-            if not self.heating_active:
-                print("[DEBUG] Superata soglia minima, attivazione riscaldamento.")
-                self.send_command("heating", True)
-                self.heating_active = True
-                self.cooling_active = False
-            self.in_range_counter = 0  # Resetta il contatore se fuori dai limiti
-
-        # La temperatura è nei limiti
+        if metric_value < self.thresholds["min"]:
+            print("[INFO] Metric is below minimum threshold. No action taken.")
+        elif self.thresholds["min"] <= metric_value <= self.thresholds["max"]:
+            print("[INFO] Metric is within thresholds. Applying base strategy.")
+            self.apply_base_strategy()
         else:
-            if self.cooling_active or self.heating_active:
-                self.in_range_counter += 1
-                print(f"[DEBUG] Temperatura nei limiti per {self.in_range_counter} rilevamenti consecutivi.")
-
-                # Disattiva gli attuatori solo dopo 3 rilevamenti consecutivi nei limiti
-                if self.in_range_counter >= 3:
-                    print("[DEBUG] 3 rilevamenti consecutivi nei limiti, disattivazione attuatori.")
-                    self.send_command("cooling", False)
-                    self.send_command("heating", False)
-                    self.cooling_active = False
-                    self.heating_active = False
-                    self.in_range_counter = 0  # Resetta il contatore dopo disattivazione
+            print("[INFO] Metric is above maximum threshold.")
+            if std_dev > 5:  # Arbitrary value for std_dev
+                print("[INFO] High standard deviation detected. Applying advanced strategy.")
+                self.apply_advanced_strategy()
             else:
-                self.in_range_counter = 0  # Resetta se non ci sono attuatori attivi
+                print("[INFO] Standard deviation is normal. Applying base strategy.")
+                self.apply_base_strategy()
 
-    def send_command(self, command, activate):
-        message = {
-            "command": command,
-            "activate": activate,
-            "timestamp": time.time()
-        }
-        # **Construct the actuator topic dynamically**
-        topic = f"{self.base_topic}/actuators/{command}"
-        print(f"[DEBUG] Tentativo di invio comando: {command}, attivazione: {activate} sul topic: {topic}")
-        self.mqtt_client.myPublish(topic, message)
+    def apply_base_strategy(self):
+        """
+        Strategia base: accende solo il primo attuatore.
+        """
+        for actuator in self.actuators[:1]:  # Solo il primo attuatore
+            self.send_command(actuator, "on")
+
+    def apply_advanced_strategy(self):
+        """
+        Strategia avanzata: accende tutti gli attuatori.
+        """
+        for actuator in self.actuators:
+            self.send_command(actuator, "on")
+
+    def send_command(self, actuator, command):
+        """
+        Invia un comando a un attuatore.
+        """
+        topic = f"{self.base_topic}/actuators/{actuator['name']}"
+        payload = {"command": command, "name": actuator["name"]}
+        self.mqtt_client.myPublish(topic, payload)
+        print(f"[DEBUG] Command '{command}' sent to {actuator['name']} on topic {topic}")
 
 
-class AdvancedControlStrategy(ControlStrategy):
-    def __init__(self, thresholds, mqtt_client, base_topic):
-        super().__init__(thresholds, mqtt_client, base_topic)
-        self.in_range_counter = 0  # Counter for consecutive in-range readings
-        self.cooling_active = False
-        self.heating_active = False
+class BasicTemperatureControlStrategy(ControlStrategy):
+    """
+    Strategia per il controllo della temperatura.
+    """
+    def analyze_statistics(self, statistics,topic):
+        print(f"[DEBUG] Analyzing temperature statistics from topic {topic}: {statistics}")
+        print(f"[DEBUG] Analyzing temperature statistics: {statistics}")
+        temp = statistics.get("mean_temperature")
+        std_dev = statistics.get("std_dev", 0)
 
-    def analyze_statistics(self, statistics):
-        mean_temp = statistics.get("mean_temperature")
-        stddev = statistics.get("stddev", 0)  # Devi sapere se stddev è disponibile
-
-        if mean_temp is None:
-            print("[ERROR] Campo 'mean_temperature' mancante.")
-            return
-
-        # Attiva cooling se la temperatura è sopra la soglia massima e stddev > 0.5
-        if mean_temp > self.thresholds["max"] and stddev > 0.5:
-            if not self.cooling_active:
-                print("[DEBUG] Superata soglia massima e deviazione standard elevata, attivazione raffreddamento.")
-                print(f"[ALERT] Valori delle statistiche fuori norma: {statistics}")
-                self.send_command("cooling", True)
-                self.cooling_active = True
-                self.heating_active = False
-            self.in_range_counter = 0  # Resetta il contatore se fuori dai limiti
-
-        # Attiva heating se la temperatura è sotto la soglia minima
-        elif mean_temp < self.thresholds["min"]:
-            if not self.heating_active:
-                print("[DEBUG] Superata soglia minima, attivazione riscaldamento.")
-                self.send_command("heating", True)
-                self.heating_active = True
-                self.cooling_active = False
-            self.in_range_counter = 0  # Resetta il contatore se fuori dai limiti
-
-        # La temperatura è nei limiti
+        if temp < self.thresholds["min"]:
+            print("[INFO] Temperature below minimum threshold. No action needed.")
+        elif self.thresholds["min"] <= temp <= self.thresholds["max"]:
+            print("[INFO] Temperature within thresholds. Applying base strategy.")
+            self.apply_base_strategy()
+        elif temp > self.thresholds["max"] and std_dev > 5:
+            print("[INFO] Temperature above threshold with high standard deviation. Applying advanced strategy.")
+            self.apply_advanced_strategy()
         else:
-            if self.cooling_active or self.heating_active:
-                self.in_range_counter += 1
-                print(f"[DEBUG] Temperatura nei limiti per {self.in_range_counter} rilevamenti consecutivi.")
-                print(f"valore: {statistics}")
-                # Disattiva gli attuatori solo dopo 3 rilevamenti consecutivi nei limiti
-                if self.in_range_counter >= 3:
-                    print("[DEBUG] 3 rilevamenti consecutivi nei limiti, disattivazione attuatori.")
-                    self.send_command("cooling", False)
-                    self.send_command("heating", False)
-                    self.cooling_active = False
-                    self.heating_active = False
-                    self.in_range_counter = 0  # Resetta il contatore dopo disattivazione
-            else:
-                self.in_range_counter = 0  # Resetta se non ci sono attuatori attivi
+            print("[INFO] Temperature above threshold but standard deviation is normal. Applying base strategy.")
+            self.apply_base_strategy()
 
-    def send_command(self, command, activate):
-        message = {
-            "command": command,
-            "activate": activate,
-            "timestamp": time.time()
-        }
-        # **Construct the actuator topic dynamically**
-        topic = f"{self.base_topic}/actuators/{command}"
-        print(f"[DEBUG] Inviando comando: {command}, attivazione: {activate} sul topic: {topic}")
-        self.mqtt_client.myPublish(topic, message)
 
 class BasicHumidityControlStrategy(ControlStrategy):
-    def analyze_statistics(self, stats):
-        mean_humidity = stats.get("mean_humidity")
+    """
+    Strategia per il controllo dell'umidità.
+    """
+    def analyze_statistics(self, statistics,topic):
+        print(f"[DEBUG] Analyzing humidity statistics from topic {topic}: {statistics}")
+        print(f"[DEBUG] Analyzing humidity statistics: {statistics}")
+        humidity = statistics.get("mean_humidity")
+        std_dev = statistics.get("std_dev", 0)
 
-        if mean_humidity is None:
-            print("[ERROR] Missing mean_humidity in stats")
-            return
-
-        if mean_humidity > self.thresholds["max"]:
-            print("[INFO] Activating dehumidifier")
-            self.send_command("dehumidifier", True)
-        elif mean_humidity < self.thresholds["min"]:
-            print("[INFO] Activating humidifier")
-            self.send_command("humidifier", True)
+        if humidity < self.thresholds["min"]:
+            print("[INFO] Humidity below minimum threshold. No action needed.")
+        elif self.thresholds["min"] <= humidity <= self.thresholds["max"]:
+            print("[INFO] Humidity within thresholds. Applying base strategy.")
+            self.apply_base_strategy()
+        elif humidity > self.thresholds["max"] and std_dev > 5:
+            print("[INFO] Humidity above threshold with high standard deviation. Applying advanced strategy.")
+            self.apply_advanced_strategy()
         else:
-            print("[INFO] Deactivating all actuators")
-            self.send_command("dehumidifier", False)
-            self.send_command("humidifier", False)
+            print("[INFO] Humidity above threshold but standard deviation is normal. Applying base strategy.")
+            self.apply_base_strategy()
 
-class AdvancedHumidityControlStrategy(ControlStrategy):
-    def analyze_statistics(self, stats):
-        mean_humidity = stats.get("mean_humidity")
-        stddev_humidity = stats.get("stddev")
-
-        if mean_humidity is None or stddev_humidity is None:
-            print("[ERROR] Missing statistics for advanced control")
+class SoilHumidityControlStrategy(ControlStrategy):
+    def analyze_statistics(self, statistics, topic):
+        logger.debug(f"Analyzing soil humidity statistics from topic {topic}: {statistics}")
+        humidity = statistics.get("mean_soil_humidity")
+        if humidity is None:
+            logger.error("Missing 'mean_humidity' in statistics. Skipping analysis.")
             return
-
-        # Controllo basato su deviazione standard
-        if mean_humidity > self.thresholds["max"] and stddev_humidity > 5:
-            print("[INFO] Activating dehumidifier aggressively")
-            self.send_command("dehumidifier", True)
-        elif mean_humidity < self.thresholds["min"] and stddev_humidity > 5:
-            print("[INFO] Activating humidifier aggressively")
-            self.send_command("humidifier", True)
+        if humidity < self.thresholds["min"]:
+            logger.info("Soil humidity below minimum threshold. Activating irrigation.")
+            self.apply_base_strategy()
+        elif humidity > self.thresholds["max"]:
+            logger.info("Soil humidity above maximum threshold. No action needed.")
         else:
-            print("[INFO] Deactivating all actuators")
-            self.send_command("dehumidifier", False)
-            self.send_command("humidifier", False)
+            logger.info("Soil humidity within thresholds. No action needed.")
+
+class ParMeterControlStrategy(ControlStrategy):
+    def analyze_statistics(self, statistics, topic):
+        logger.debug(f"Analyzing PAR meter statistics from topic {topic}: {statistics}")
+        par_value = statistics.get("mean_par_value")
+        if par_value is None:
+            logger.error("Missing 'mean_par_value' in statistics. Skipping analysis.")
+            return
+        if par_value < self.thresholds["min"]:
+            logger.info("PAR value below minimum threshold. Activating lighting system.")
+            self.apply_base_strategy()
+        elif par_value > self.thresholds["max"]:
+            logger.info("PAR value above maximum threshold. Deactivating lighting system.")
+            self.apply_advanced_strategy()
+
+class PHControlStrategy(ControlStrategy):
+    def analyze_statistics(self, statistics, topic):
+        logger.debug(f"Analyzing pH statistics from topic {topic}: {statistics}")
+        ph_value = statistics.get("mean_pH")
+        if ph_value is None:
+            logger.error("Missing 'mean_pH' in statistics. Skipping analysis.")
+            return
+        if ph_value < self.thresholds["min"]:
+            logger.info("pH below minimum threshold. Adjusting pH up.")
+            self.apply_base_strategy()
+        elif ph_value > self.thresholds["max"]:
+            logger.info("pH above maximum threshold. Adjusting pH down.")
+            self.apply_advanced_strategy()

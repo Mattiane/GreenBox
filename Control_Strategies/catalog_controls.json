@@ -1,31 +1,78 @@
 {
-    "temperature": {
-      "thresholds": {
-        "min": 15,
-        "max": 30
-      },
-      "control_strategy": "temperature_control"
-    },
-    "air_humidity": {
-      "thresholds": {
-        "min": 40,
-        "max": 70
-      },
-      "control_strategy": "humidity_control"
-    },
-    "pH": {
-      "thresholds": {
-        "min": 6.5,
-        "max": 7.5
-      },
-      "control_strategy": "ph_control"
-    },
-    "soil_hygrometer": {
-      "thresholds": {
-        "min": 30,
-        "max": 60
-      },
-      "control_strategy": "soil_humidity_control"
+  "clients": [
+    {
+      "raspberry_id": "rb01",
+      "metrics": {
+        "temperature": {
+          "control_strategy": "BasicTemperatureControlStrategy",
+          "thresholds": {
+            "min": 15,
+            "max": 30
+          },
+          "actuators": [
+            {
+              "name": "SmartFan1",
+              "type": "fan"
+            },
+            {
+              "name": "SmartFan2",
+              "type": "fan"
+            }
+          ]
+        },
+        "air_humidity": {
+          "control_strategy": "BasicHumidityControlStrategy",
+          "thresholds": {
+            "min": 40,
+            "max": 70
+          },
+          "actuators": [
+            {
+              "name": "Humidifier1",
+              "type": "humidifier"
+            }
+          ]
+        },
+        "soil_humidity": {
+          "control_strategy": "SoilHumidityControlStrategy",
+          "thresholds": {
+            "min": 20,
+            "max": 50
+          },
+          "actuators": [
+            {
+              "name": "IrrigationSystem1",
+              "type": "irrigation"
+            }
+          ]
+        },
+        "par_meter": {
+          "control_strategy": "ParMeterControlStrategy",
+          "thresholds": {
+            "min": 200,
+            "max": 1000
+          },
+          "actuators": [
+            {
+              "name": "LightingSystem1",
+              "type": "lighting"
+            }
+          ]
+        },
+        "pH": {
+          "control_strategy": "PHControlStrategy",
+          "thresholds": {
+            "min": 6.5,
+            "max": 7.5
+          },
+          "actuators": [
+            {
+              "name": "PHBalancer1",
+              "type": "balancer"
+            }
+          ]
+        }
+      }
     }
-  }
-  
+  ]
+}

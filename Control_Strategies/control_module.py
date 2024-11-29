@@ -1,47 +1,29 @@
-import json
-from control_strategies import BasicControlStrategy, AdvancedControlStrategy, BasicHumidityControlStrategy, AdvancedHumidityControlStrategy
+
+from actuators.actuator_manager import ActuatorManager
+
+from control_strategies import ControlStrategyFactory
 
 
 class ControlModule:
-    def __init__(self, mqtt_client, raspberry_id, base_topic):
+    def __init__(self, mqtt_client, raspberry_id, base_topic, catalog_file):
         self.mqtt_client = mqtt_client
         self.base_topic = base_topic
-        # Load the specific strategy for the current Raspberry Pi
-        self.strategy = self.load_strategy(raspberry_id)
+        self.raspberry_id = raspberry_id
+        self.actuator_manager = ActuatorManager(catalog_file, raspberry_id)
 
-    def load_strategy(self, raspberry_id):
-        with open("catalog.json") as f:
-            catalog = json.load(f)
+    def analyze_statistics(self, statistics, metric):
+        print(f"[DEBUG] Analyzing statistics for {metric}: {statistics}")
+        actuators = self.actuator_manager.get_actuators(metric)
+        print(f"[DEBUG] Found actuators for {metric}: {actuators}")
+        if not actuators:
+            print("[ERROR] No actuators found for metric")
+        thresholds = actuators.get("thresholds", {})
+        strategy_name = actuators.get("control_strategy", "BasicTemperatureControlStrategy")
+        print(f"[DEBUG] Using strategy: {strategy_name}")
+        strategy = ControlStrategyFactory.create(strategy_name, thresholds, self.mqtt_client, self.base_topic, actuators)
+        strategy.analyze_statistics(statistics)
 
-        for client in catalog["clients"]:
-            if client["raspberry_id"] == raspberry_id:
-                strategy_name = client["control_strategy"]
-                print(f"[DEBUG] Strategia caricata: {strategy_name}")
 
-                thresholds = {"min": 18.0, "max": 24.0}
-                if strategy_name == "BasicControlStrategy":
-                    print("[DEBUG] Caricamento BasicControlStrategy")
-                    return BasicControlStrategy(thresholds, self.mqtt_client, self.base_topic)
-                elif strategy_name == "AdvancedControlStrategy":
-                    print("[DEBUG] Caricamento AdvancedControlStrategy")
-                    return AdvancedControlStrategy(thresholds, self.mqtt_client, self.base_topic)
-                else:
-                    raise ValueError(f"Strategia sconosciuta: {strategy_name}")
-            if client["raspberry_id"] == raspberry_id:
-                strategy_name = client["control_strategy"]
-                thresholds = self.catalog.get("thresholds", {}).get("air_humidity", {"min": 40, "max": 70})
 
-            if strategy_name == "BasicHumidityControlStrategy":
-                print("[DEBUG] Loading BasicHumidityControlStrategy")
-                return BasicHumidityControlStrategy(thresholds, self.mqtt_client, self.base_topic)
-            elif strategy_name == "AdvancedHumidityControlStrategy":
-                print("[DEBUG] Loading AdvancedHumidityControlStrategy")
-                return AdvancedHumidityControlStrategy(thresholds, self.mqtt_client, self.base_topic)
 
-        raise ValueError("Raspberry Pi non trovato nel catalogo.")
 
-    def analyze_statistics(self, statistics):
-        """
-        Forward statistics to the loaded strategy to decide actions.
-        """
-        self.strategy.analyze_statistics(statistics)

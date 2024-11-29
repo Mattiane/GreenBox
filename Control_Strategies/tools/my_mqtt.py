@@ -11,9 +11,7 @@ class MyMQTT:
         self.clientID = clientID
         self._topic = ""
         self._isSubscriber = False
-        self._control_module = None  # Aggiunge un riferimento al modulo di controllo
-
-        # Crea un'istanza di paho.mqtt.client
+        self._control_module = None  
         self._paho_mqtt = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, clientID)
         # register the callback
         self._paho_mqtt.on_connect = self.myOnConnect
@@ -37,16 +35,26 @@ class MyMQTT:
             print(f"Connection failed with reason code: {reason_code}")
 
     def myOnMessageReceived(self, client, userdata, message):
-        """
-        Callback chiamato quando si riceve un nuovo messaggio MQTT.
-        Se il modulo di controllo è configurato, inoltra il messaggio al modulo di controllo.
-        """
-        payload = message.payload.decode('utf-8')
+        topic = message.topic
+        payload = message.payload.decode()
+        print(f"[DEBUG] Message received on {topic}: {payload}")
 
+        # Notifica tramite notifier
+        if self.notifier:
+            self.notifier(topic, payload)
+
+        # Se è collegato un modulo di controllo, analizza le statistiche
         if self._control_module:
-            # Passa le statistiche al modulo di controllo
-            data = json.loads(payload)
-            self._control_module.analyze_statistics(data)
+            try:
+                # Estrai la metrica dal topic e decodifica il messaggio
+                metric = topic.split("/")[-2]  # Supponendo che il topic abbia il formato '/rb01/temperature/statistics'
+                statistics = json.loads(payload)
+                print(f"[DEBUG] Sending statistics to control module: {statistics}")
+                self._control_module.analyze_statistics(statistics, metric)
+            except Exception as e:
+                print(f"[ERROR] Failed to process message: {e}")
+
+
 
     def myPublish(self, topic, msg):
         """
@@ -73,6 +81,8 @@ class MyMQTT:
         """
         self._paho_mqtt.connect(self.broker, self.port)
         self._paho_mqtt.loop_start()
+        print("[DEBUG] MQTT client loop started")
+
 
     def stop(self):
         """
